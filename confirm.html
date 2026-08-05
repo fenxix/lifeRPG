@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>LifeRPG — Почта подтверждена</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#D97F4F">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/favicon-32.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/supabase-client.js"></script>
+<style>
+:root {
+  --bg: #FAF3E7; --card: #FFFFFF; --card2: #F3E9D8; --border: #EDE1CC;
+  --terracotta: #D97F4F; --sage: #7D9471; --gold: #C08430; --coral: #E08589;
+  --text: #4A3C2F; --dim: #A8977E; --shadow: 0 6px 20px rgba(74,60,47,.08);
+  --danger: #D9634F;
+}
+html[data-theme="dark"] {
+  --bg: #241E1A; --card: #302722; --card2: #3B3129; --border: #473C33;
+  --text: #F5EAE0; --dim: #B8A594; --shadow: 0 6px 20px rgba(0,0,0,.3); --gold: #E3A857;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; font-family: 'Nunito', sans-serif; background: var(--bg); color: var(--text); display: flex; justify-content: center; align-items: center; padding: 20px; transition: background .2s, color .2s; }
+.phone { width: 380px; min-height: 60vh; background: var(--bg); border: 1px solid var(--border); border-radius: 28px; position: relative; display: flex; align-items: center; justify-content: center; }
+.box { text-align: center; padding: 30px; }
+.crest { width: 74px; height: 74px; margin: 0 auto 18px; border-radius: 24px; background: linear-gradient(135deg, #A3BB93, var(--sage)); display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow); font-size: 30px; }
+.crest.err { background: linear-gradient(135deg, #EFA8A0, var(--coral)); }
+h1 { font-size: 18px; font-weight: 800; margin: 0 0 8px; }
+p { font-size: 13px; color: var(--dim); font-weight: 600; margin: 0 0 20px; line-height: 1.5; }
+.btn { font-family: inherit; font-size: 12px; font-weight: 800; padding: 11px 24px; border-radius: 12px; border: none; color: #fff; background: var(--terracotta); cursor: pointer; }
+.spinner { width: 30px; height: 30px; border: 3px solid var(--card2); border-top-color: var(--sage); border-radius: 50%; margin: 0 auto 16px; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="box" id="state-loading">
+    <div class="spinner"></div>
+    <p>Подтверждаем почту...</p>
+  </div>
+
+  <div class="box" id="state-success" style="display:none;">
+    <div class="crest">✅</div>
+    <h1>Почта подтверждена!</h1>
+    <p>Аккаунт активирован. Заходим в мир LifeRPG.</p>
+    <button class="btn" onclick="location.href='index.html'">Войти в приложение</button>
+  </div>
+
+  <div class="box" id="state-error" style="display:none;">
+    <div class="crest err">⚠️</div>
+    <h1>Что-то пошло не так</h1>
+    <p>Ссылка недействительна или уже была использована ранее.</p>
+    <button class="btn" onclick="location.href='auth.html'">Вернуться ко входу</button>
+  </div>
+</div>
+
+<script>
+  (async () => {
+    const { data } = await sb.auth.getSession();
+    document.getElementById('state-loading').style.display = 'none';
+    if (data.session) {
+      document.getElementById('state-success').style.display = 'block';
+      setTimeout(() => window.location.href = 'index.html', 2500);
+    } else {
+      document.getElementById('state-error').style.display = 'block';
+    }
+  })();
+</script>
+</body>
+</html>
