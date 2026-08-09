@@ -379,6 +379,26 @@ input:checked + .slider::before { transform: translateX(16px); background: var(-
 
   function toggleDrawer(open) { document.getElementById('drawer').classList.toggle('open', open); }
 
+  function nextThreshold(stat, value) {
+    const thresholds = {
+        endurance: [
+            { value: 10, unlocks: 'Новичок' },
+            { value: 25, unlocks: 'Выносливый' },
+            { value: 50, unlocks: 'Атлет' },
+            { value: 100, unlocks: 'Мастер выносливости' }
+        ],
+        spirituality: [
+            { value: 10, unlocks: 'Начинающий' },
+            { value: 25, unlocks: 'Осознанный' },
+            { value: 50, unlocks: 'Мудрец' },
+            { value: 100, unlocks: 'Мастер духа' }
+        ]
+    };
+
+    const list = thresholds[stat] || [];
+    return list.find(t => t.value > value) || null;
+}
+  
   function render() {
     const p = profile;
     document.getElementById('player-name').innerText = p.nickname;
