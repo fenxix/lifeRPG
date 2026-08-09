@@ -470,9 +470,15 @@ input:checked + .slider::before { transform: translateX(16px); background: var(-
     const { data: modules } = await sb.from('enabled_modules').select('*').eq('user_id', user.id).eq('enabled', true);
     renderModulesNav(modules || []);
 
-    render();
-    document.getElementById('loading-screen').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
+    try {
+  render();
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+} catch (error) {
+  console.error('Ошибка render:', error);
+  document.getElementById('loading-screen').innerText =
+    'Ошибка загрузки приложения. Обнови страницу.';
+}
 
     if (didReset && previousDate) {
       showDailySummary(previousDate);
@@ -603,7 +609,32 @@ input:checked + .slider::before { transform: translateX(16px); background: var(-
     document.getElementById('player-sub').innerText = `Искатель · Ур. ${p.level}`;
     setupDayWidget(p);
     document.getElementById('avatar-initial').innerText = p.nickname[0]?.toUpperCase() || '?';
-    if (p.avatar_url) document.getElementById('id').querySelector('.hex-avatar').innerHTML = `<img src="${p.avatar_url}">`;
+    const avatarBox = document.querySelector('.hex-avatar');
+if (avatarBox) {
+  avatarBox.innerHTML = '';
+
+  const fallback = document.createElement('span');
+  fallback.id = 'avatar-initial';
+  fallback.innerText = (p.nickname || 'Игрок')[0]?.toUpperCase() || '?';
+  avatarBox.appendChild(fallback);
+
+  if (p.avatar_url && typeof p.avatar_url === 'string') {
+    const img = document.createElement('img');
+    img.src = p.avatar_url;
+    img.alt = '';
+
+    img.onload = () => {
+      const old = avatarBox.querySelector('#avatar-initial');
+      if (old) old.remove();
+    };
+
+    img.onerror = () => {
+      img.remove();
+    };
+
+    avatarBox.appendChild(img);
+  }
+}
 
     document.getElementById('level-num').innerText = p.level;
     const needed = xpNeededForLevel(p.level);
