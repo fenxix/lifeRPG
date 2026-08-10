@@ -74,6 +74,14 @@ function incrementStat(profile, key, amount = 1) {
   profile[key] = Math.min(STAT_CAP, current + amount);
 }
 
+// Дата в ЛОКАЛЬНОМ времени пользователя (не UTC!) — важно для сброса квестов по календарному дню
+function localDateStr(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function xpNeededForLevel(level) {
   return level * 100;
 }
@@ -133,12 +141,12 @@ function getCategoryDisplay(quest) {
 }
 
 function isoWeekKey(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
-  const day = (d.getUTCDay() + 6) % 7; // понедельник = 0
-  d.setUTCDate(d.getUTCDate() - day + 3);
-  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
-  const week = 1 + Math.round(((d - firstThursday) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
-  return `${d.getUTCFullYear()}-W${week}`;
+  const d = new Date(dateStr + 'T00:00:00'); // парсится как локальное время
+  const day = (d.getDay() + 6) % 7; // понедельник = 0
+  d.setDate(d.getDate() - day + 3);
+  const firstThursday = new Date(d.getFullYear(), 0, 4);
+  const week = 1 + Math.round(((d - firstThursday) / 86400000 - 3 + ((firstThursday.getDay() + 6) % 7)) / 7);
+  return `${d.getFullYear()}-W${week}`;
 }
 
 // Нужно ли сбросить отметку "выполнено" у конкретного задания на сегодня
@@ -155,7 +163,7 @@ function questNeedsReset(quest, todayStr) {
 // Общий сброс, вызывается при заходе и на Главную, и в Квесты.
 // profile мутируется на месте. Возвращает { didReset, previousDate } — для показа итогов дня.
 async function performDailyReset(user, profile, quests) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
   let didReset = false;
   let previousDate = null;
 
