@@ -505,7 +505,7 @@ input:checked + .slider::before { transform: translateX(16px); background: var(-
   }
 
   async function checkDailyReset() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateStr();
     if (profile.last_login_date === today) return;
     if (profile.last_login_date) {
       const { data: qs } = await sb.from('quests').select('is_completed_today').eq('user_id', user.id);
@@ -531,7 +531,7 @@ input:checked + .slider::before { transform: translateX(16px); background: var(-
   function toggleDrawer(open) { document.getElementById('drawer').classList.toggle('open', open); }
 
   function todaysRelevantQuests() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateStr();
     return quests.filter(q => (q.task_type === 'daily' || !q.task_type) || (q.due_date === today));
   }
 
@@ -547,7 +547,7 @@ input:checked + .slider::before { transform: translateX(16px); background: var(-
   }
 
   function renderGoalCard() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateStr();
     const container = document.getElementById('goal-card');
     const hasGoal = profile.daily_goal_date === today && profile.daily_goal_quest_id;
     const goalQuest = hasGoal ? quests.find(q => q.id === profile.daily_goal_quest_id) : null;
@@ -579,7 +579,7 @@ input:checked + .slider::before { transform: translateX(16px); background: var(-
   }
 
   async function selectGoal(questId) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateStr();
     profile.daily_goal_quest_id = questId;
     profile.daily_goal_date = today;
     await saveProfileFields(user.id, { daily_goal_quest_id: questId, daily_goal_date: today });
