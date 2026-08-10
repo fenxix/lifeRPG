@@ -571,7 +571,7 @@ input:focus, select:focus { border-color: var(--terracotta); }
     if (!q || !q.due_date) { showToast('У этого квеста нет даты выполнения'); return; }
     const next = new Date(q.due_date + 'T00:00:00');
     next.setDate(next.getDate() + 1);
-    q.due_date = next.toISOString().slice(0, 10);
+    q.due_date = localDateStr(next);
     openMenuId = null;
     await sb.from('quests').update({ due_date: q.due_date }).eq('id', id);
     render();
@@ -623,7 +623,7 @@ input:focus, select:focus { border-color: var(--terracotta); }
     const q = quests.find(x => x.id === id);
     if (!q || q.is_completed_today) return;
     q.is_completed_today = true;
-    q.last_completed_date = new Date().toISOString().slice(0, 10);
+    q.last_completed_date = localDateStr();
 
     const xpMultiplier = 1 + (profile.skill_mind - 1) * 0.10;
     const finalXp = Math.round(q.reward_xp * xpMultiplier);
@@ -671,13 +671,19 @@ input:focus, select:focus { border-color: var(--terracotta); }
     document.getElementById('cel-skill').innerText = `Навык «${statDef(statKey).name}» +1`;
     openModal('celebrate-modal');
 
+    // Разовые задания после выполнения сами уходят в архив
+    if (q.task_type === 'once') {
+      quests = quests.filter(x => x.id !== id);
+      await sb.from('quests').update({ archived: true }).eq('id', id);
+    }
+
     render();
   }
 
   const MILESTONE_COUNT = 3;
   const MILESTONE_BONUS_XP = 30;
   async function checkMilestone() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateStr();
     if (profile.milestone_claimed_date === today) return;
 
     const relevant = quests.filter(q => (q.task_type === 'daily' || !q.task_type) || q.due_date === today);
