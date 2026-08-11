@@ -44,6 +44,7 @@ async function requireAuth() {
 }
 
 async function logout() {
+  if (!confirm('Точно выйти из аккаунта?')) return;
   await sb.auth.signOut();
   window.location.href = 'auth.html';
 }
@@ -80,6 +81,53 @@ function localDateStr(d = new Date()) {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+// === Мир / экспедиции — общий справочник и завершение похода с ЛЮБОЙ страницы ===
+const REGIONS = [
+  { id: 'home', name: 'Уютный Очаг', desc: 'Безопасная зона для отдыха', energyCost: 10, timeSec: 15, icon: '🏠' },
+  { id: 'village', name: 'Торговый Посад', desc: 'Поиски редких предметов и заданий', energyCost: 20, timeSec: 30, icon: '🏪' },
+  { id: 'forest', name: 'Забытый Лес', desc: 'Опасные тропы и ценное золото', energyCost: 35, timeSec: 50, icon: '🌲' }
+];
+
+// Проверяет все походы пользователя и завершает те, что уже истекли — независимо от того,
+// на какой странице приложения сейчас находится пользователь.
+// Возвращает массив завершённых регионов (для показа уведомления), либо [].
+async function resolveFinishedExpeditions(user, profile) {
+  const { data } = await sb.from('region_state').select('*').eq('user_id', user.id).eq('exploring', true);
+  const active = data || [];
+  const now = Date.now();
+  const finished = [];
+
+  for (const state of active) {
+    if (new Date(state.finish_time).getTime() > now) continue;
+    const reg = REGIONS.find(r => r.id === state.region_id);
+    if (!reg) continue;
+
+    await sb.from('region_state').update({ exploring: false, finish_time: null }).eq('user_id', user.id).eq('region_id', reg.id);
+
+    const goldWon = Math.floor(Math.random() * 20) + 10;
+    const xpWon = Math.floor(Math.random() * 30) + 15;
+    profile.gold += goldWon;
+    profile.xp += xpWon;
+    checkLevelUp(profile);
+
+    if (Math.random() < 0.45) {
+      const isHp = Math.random() < 0.3;
+      await sb.from('inventory_items').insert(isHp
+        ? { user_id: user.id, name: 'Целебный отвар', rarity: 'Обычный', description: 'Восстанавливает +30 HP', type: 'hp', val: 30, icon: '💗' }
+        : { user_id: user.id, name: 'Зелье энергии', rarity: 'Редкий', description: 'Восстанавливает +50 энергии', type: 'energy', val: 50, icon: '🧪' });
+    }
+
+    await logActivity(user.id, 'expedition_done', `Экспедиция в "${reg.name}" завершена`);
+    finished.push({ region: reg, gold: goldWon, xp: xpWon });
+  }
+
+  if (finished.length > 0) {
+    await saveProfileFields(user.id, { gold: profile.gold, xp: profile.xp, level: profile.level, skill_points: profile.skill_points, hp: profile.hp, energy: profile.energy });
+  }
+
+  return finished;
 }
 
 function xpNeededForLevel(level) {
