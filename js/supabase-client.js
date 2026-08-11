@@ -250,6 +250,25 @@ async function saveProfileFields(userId, fields) {
   await sb.from('profiles').update(fields).eq('id', userId);
 }
 
+// Загружает файл аватара в Supabase Storage (бакет 'avatars') и возвращает публичную ссылку.
+// Файл кладётся в папку с id пользователя — так политики доступа проще настраивать.
+async function uploadAvatar(userId, file) {
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+  const path = `${userId}/avatar_${Date.now()}.${ext}`;
+
+  const { error: uploadError } = await sb.storage.from('avatars').upload(path, file, {
+    cacheControl: '3600',
+    upsert: true,
+  });
+  if (uploadError) {
+    console.error('Avatar upload error:', uploadError);
+    return null;
+  }
+
+  const { data } = sb.storage.from('avatars').getPublicUrl(path);
+  return data?.publicUrl || null;
+}
+
 // Мутирует profile (level, xp, skill_points, hp, energy) пока хватает XP. Возвращает true если был левел-ап
 function checkLevelUp(profile) {
   let leveled = false;
