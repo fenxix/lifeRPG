@@ -262,7 +262,13 @@ function isDayFullyComplete(quests) {
 
 function isChestAvailable(profile, quests) {
   const today = localDateStr();
-  return isDayFullyComplete(quests) && profile.last_chest_date !== today;
+  if (profile.last_chest_date === today) return false;
+  return isDayFullyComplete(quests) || !!profile.bonus_chest;
+}
+
+// Куплен ли уже "пропуск" на сундук, но ещё не использован
+function hasUnusedBonusChest(profile) {
+  return !!profile.bonus_chest && profile.last_chest_date !== localDateStr();
 }
 
 // Текущий множитель XP от активного "Ускорителя XP" (если ещё не истёк)
@@ -274,6 +280,8 @@ function currentXpBoostMultiplier(profile) {
 }
 
 // === Сундук дня ===
+const CHEST_BUY_PRICE = 1000; // цена "пропуска" на сундук в Магазине
+
 const CHEST_RARITIES = [
   { key: 'common', name: 'Обычный', color: '#A8977E', weight: 55 },
   { key: 'rare', name: 'Редкий', color: '#4E7DFF', weight: 30 },
@@ -418,6 +426,11 @@ async function applyChestReward(user, profile, reward) {
 
   profile.last_chest_date = localDateStr();
   fields.last_chest_date = profile.last_chest_date;
+
+  if (profile.bonus_chest) {
+    profile.bonus_chest = false;
+    fields.bonus_chest = false;
+  }
 
   if (Object.keys(fields).length > 0) await saveProfileFields(user.id, fields);
   return reward;
