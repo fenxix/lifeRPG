@@ -17,6 +17,8 @@ if ('serviceWorker' in navigator) {
 (function () {
   const saved = localStorage.getItem('liferpg-theme') || 'light';
   document.documentElement.setAttribute('data-theme', saved);
+  const accent = localStorage.getItem('liferpg-accent');
+  if (accent) document.documentElement.style.setProperty('--terracotta', accent);
 })();
 
 function toggleTheme() {
@@ -221,11 +223,19 @@ async function performDailyReset(user, profile, quests) {
     if (profile.last_login_date) {
       const dailyQuests = quests.filter(q => q.task_type === 'daily' || !q.task_type);
       const uncompletedDaily = dailyQuests.filter(q => !q.is_completed_today);
-      if (dailyQuests.length > 0 && uncompletedDaily.length === 0) profile.daily_streak += 1;
-      else if (uncompletedDaily.length > 0) profile.daily_streak = 0;
+      if (dailyQuests.length > 0 && uncompletedDaily.length === 0) {
+        profile.daily_streak += 1;
+      } else if (uncompletedDaily.length > 0) {
+        if ((profile.shield_count || 0) > 0) {
+          // Щит защищает серию от одного пропущенного дня — тратится вместо сброса стрика
+          profile.shield_count -= 1;
+        } else {
+          profile.daily_streak = 0;
+        }
+      }
     }
     profile.last_login_date = today;
-    await saveProfileFields(user.id, { last_login_date: today, daily_streak: profile.daily_streak });
+    await saveProfileFields(user.id, { last_login_date: today, daily_streak: profile.daily_streak, shield_count: profile.shield_count || 0 });
   }
 
   const toReset = quests.filter(q => questNeedsReset(q, today));
@@ -235,6 +245,208 @@ async function performDailyReset(user, profile, quests) {
   }
 
   return { didReset, previousDate };
+}
+
+// === Квесты дня и завершение дня ===
+// Общая логика "какие квесты считаются днём" — используется на Главной и в Квестах.
+function getTodaysRelevantQuests(quests) {
+  const today = localDateStr();
+  return quests.filter(q => (q.task_type === 'daily' || !q.task_type) || (q.due_date === today));
+}
+
+// День считается завершённым на 100%, если есть хотя бы 1 квест дня и все они выполнены
+function isDayFullyComplete(quests) {
+  const relevant = getTodaysRelevantQuests(quests);
+  return relevant.length > 0 && relevant.every(q => q.is_completed_today);
+}
+
+function isChestAvailable(profile, quests) {
+  const today = localDateStr();
+  return isDayFullyComplete(quests) && profile.last_chest_date !== today;
+}
+
+// Текущий множитель XP от активного "Ускорителя XP" (если ещё не истёк)
+function currentXpBoostMultiplier(profile) {
+  if (profile.xp_boost_until && new Date(profile.xp_boost_until).getTime() > Date.now()) {
+    return profile.xp_boost_mult || 1;
+  }
+  return 1;
+}
+
+// === Сундук дня ===
+const CHEST_RARITIES = [
+  { key: 'common', name: 'Обычный', color: '#A8977E', weight: 55 },
+  { key: 'rare', name: 'Редкий', color: '#4E7DFF', weight: 30 },
+  { key: 'epic', name: 'Эпический', color: '#9B59B6', weight: 12 },
+  { key: 'legendary', name: 'Легендарный', color: '#E3A857', weight: 3 },
+];
+
+const TITLE_POOL = ['Хранитель Рассвета', 'Несгибаемый', 'Мастер Порядка', 'Искатель Смысла', 'Тень Дисциплины', 'Страж Привычек', 'Архитектор Дня', 'Вечный Странник'];
+
+const ACCENT_POOL = [
+  { name: 'Изумруд', hex: '#4E9E6F' },
+  { name: 'Аметист', hex: '#8B5FBF' },
+  { name: 'Сапфир', hex: '#3E7CB1' },
+  { name: 'Роза', hex: '#D9527F' },
+  { name: 'Уголь', hex: '#4A4A4A' },
+];
+
+const TROPHY_ITEMS = [
+  { name: 'Осколок Памяти', icon: '🔮', desc: 'Хранит отпечаток удачного дня' },
+  { name: 'Печать Воли', icon: '📜', desc: 'Символ несгибаемой дисциплины' },
+  { name: 'Медальон Странника', icon: '🧿', desc: 'Талисман на удачу в делах' },
+  { name: 'Кристалл Фокуса', icon: '💎', desc: 'Говорят, обостряет разум' },
+  { name: 'Перо Феникса', icon: '🪶', desc: 'Символ возрождения после трудного дня' },
+];
+
+// Пулы возможных наград по редкости (у каждой — свой вес внутри пула)
+const CHEST_REWARD_POOLS = {
+  common: [
+    { type: 'gold', min: 30, max: 60, weight: 70 },
+    { type: 'xp_potion', min: 15, max: 30, weight: 30 },
+  ],
+  rare: [
+    { type: 'gold', min: 60, max: 120, weight: 40 },
+    { type: 'xp_potion', min: 30, max: 50, weight: 25 },
+    { type: 'shield', weight: 15 },
+    { type: 'trophy', weight: 20 },
+  ],
+  epic: [
+    { type: 'gold', min: 150, max: 250, weight: 30 },
+    { type: 'xp_boost', mult: 1.5, hours: 24, weight: 25 },
+    { type: 'trophy', weight: 25 },
+    { type: 'title', weight: 20 },
+  ],
+  legendary: [
+    { type: 'gold', min: 350, max: 600, weight: 25 },
+    { type: 'xp_boost', mult: 2, hours: 24, weight: 25 },
+    { type: 'title', weight: 20 },
+    { type: 'customization', weight: 15 },
+    { type: 'trophy', weight: 15 },
+  ],
+};
+
+function weightedPick(list) {
+  const total = list.reduce((s, x) => s + x.weight, 0);
+  let r = Math.random() * total;
+  for (const item of list) {
+    if (r < item.weight) return item;
+    r -= item.weight;
+  }
+  return list[list.length - 1];
+}
+
+function rollChestRarity() {
+  return weightedPick(CHEST_RARITIES).key;
+}
+
+// Собирает конкретную награду (ещё не применённую) для показа в UI
+function rollChestReward(rarity, profile) {
+  let pool = CHEST_REWARD_POOLS[rarity] || CHEST_REWARD_POOLS.common;
+  // Если щит уже есть — не даём второй, перебрасываем в этот же пул без 'shield'
+  if ((profile.shield_count || 0) > 0) pool = pool.filter(x => x.type !== 'shield');
+  const picked = weightedPick(pool);
+
+  const reward = { rarity, type: picked.type };
+  if (picked.type === 'gold') {
+    reward.amount = Math.floor(Math.random() * (picked.max - picked.min + 1)) + picked.min;
+    reward.label = `+${reward.amount} золота`;
+    reward.icon = '🪙';
+  } else if (picked.type === 'xp_potion') {
+    reward.amount = Math.floor(Math.random() * (picked.max - picked.min + 1)) + picked.min;
+    reward.label = `Зелье XP (+${reward.amount} XP)`;
+    reward.icon = '🧪';
+  } else if (picked.type === 'shield') {
+    reward.label = 'Щит серии';
+    reward.icon = '🛡️';
+  } else if (picked.type === 'xp_boost') {
+    reward.mult = picked.mult;
+    reward.hours = picked.hours;
+    reward.label = `Ускоритель XP ×${picked.mult} на ${picked.hours}ч`;
+    reward.icon = '⚡';
+  } else if (picked.type === 'trophy') {
+    const t = TROPHY_ITEMS[Math.floor(Math.random() * TROPHY_ITEMS.length)];
+    reward.item = t;
+    reward.label = t.name;
+    reward.icon = t.icon;
+  } else if (picked.type === 'title') {
+    const pool2 = TITLE_POOL.filter(t => !(profile.unlocked_titles || []).includes(t));
+    const t = (pool2.length > 0 ? pool2 : TITLE_POOL)[Math.floor(Math.random() * (pool2.length > 0 ? pool2.length : TITLE_POOL.length))];
+    reward.title = t;
+    reward.label = `Титул «${t}»`;
+    reward.icon = '👑';
+  } else if (picked.type === 'customization') {
+    const pool2 = ACCENT_POOL.filter(a => !(profile.unlocked_accents || []).includes(a.hex));
+    const a = (pool2.length > 0 ? pool2 : ACCENT_POOL)[Math.floor(Math.random() * (pool2.length > 0 ? pool2.length : ACCENT_POOL.length))];
+    reward.accent = a;
+    reward.label = `Цветовая тема «${a.name}»`;
+    reward.icon = '🎨';
+  }
+  return reward;
+}
+
+// Применяет награду: мутирует profile и пишет изменения в БД. Возвращает reward (для UI).
+async function applyChestReward(user, profile, reward) {
+  const fields = {};
+  if (reward.type === 'gold') {
+    profile.gold += reward.amount;
+    fields.gold = profile.gold;
+  } else if (reward.type === 'xp_potion') {
+    await sb.from('inventory_items').insert({ user_id: user.id, name: 'Зелье опыта', rarity: CHEST_RARITIES.find(r => r.key === reward.rarity).name, description: `Восстанавливает +${reward.amount} XP`, type: 'xp', val: reward.amount, icon: '🧪' });
+  } else if (reward.type === 'shield') {
+    profile.shield_count = Math.min(1, (profile.shield_count || 0) + 1);
+    fields.shield_count = profile.shield_count;
+  } else if (reward.type === 'xp_boost') {
+    profile.xp_boost_mult = reward.mult;
+    profile.xp_boost_until = new Date(Date.now() + reward.hours * 3600 * 1000).toISOString();
+    fields.xp_boost_mult = profile.xp_boost_mult;
+    fields.xp_boost_until = profile.xp_boost_until;
+  } else if (reward.type === 'trophy') {
+    await sb.from('inventory_items').insert({ user_id: user.id, name: reward.item.name, rarity: CHEST_RARITIES.find(r => r.key === reward.rarity).name, description: reward.item.desc, type: 'trophy', val: 0, icon: reward.item.icon });
+  } else if (reward.type === 'title') {
+    profile.unlocked_titles = [...(profile.unlocked_titles || []), reward.title];
+    profile.title = reward.title;
+    fields.unlocked_titles = profile.unlocked_titles;
+    fields.title = profile.title;
+  } else if (reward.type === 'customization') {
+    profile.unlocked_accents = [...(profile.unlocked_accents || []), reward.accent.hex];
+    profile.accent_color = reward.accent.hex;
+    fields.unlocked_accents = profile.unlocked_accents;
+    fields.accent_color = profile.accent_color;
+    applyAccentColor(profile.accent_color);
+  }
+
+  profile.last_chest_date = localDateStr();
+  fields.last_chest_date = profile.last_chest_date;
+
+  if (Object.keys(fields).length > 0) await saveProfileFields(user.id, fields);
+  return reward;
+}
+
+// Применяет акцентный цвет прямо сейчас (CSS-переменная) и кэширует его для мгновенной подгрузки на след. странице
+function applyAccentColor(hex) {
+  if (!hex) return;
+  document.documentElement.style.setProperty('--terracotta', hex);
+  localStorage.setItem('liferpg-accent', hex);
+}
+
+// === Редкий предмет дня (магазин) — детерминированно одинаков у всех в течение календарного дня ===
+const RARE_SHOP_ITEMS = [
+  { name: 'Аура героя', icon: '✨', desc: 'Мерцающая аура вокруг персонажа' },
+  { name: 'Клинок Рассвета', icon: '⚔️', desc: 'Легендарное оружие первых искателей' },
+  { name: 'Плащ Тумана', icon: '🌫️', desc: 'Скрывает владельца от неудач' },
+  { name: 'Корона Стойкости', icon: '👑', desc: 'Носится теми, кто не сдаётся' },
+  { name: 'Крылья Феникса', icon: '🦅', desc: 'Символ возрождения после падений' },
+  { name: 'Печать Времени', icon: '⏳', desc: 'Хранит память о каждом завершённом дне' },
+  { name: 'Шёпот Звёзд', icon: '🌟', desc: 'Редчайшая находка искателей приключений' },
+];
+
+function getDailyRareItem() {
+  const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+  const item = RARE_SHOP_ITEMS[dayOfYear % RARE_SHOP_ITEMS.length];
+  const midnight = new Date();
+  midnight.setHours(24, 0, 0, 0);
+  return { ...item, price: 2000, expiresAt: midnight };
 }
 
 async function logActivity(userId, eventType, description) {
