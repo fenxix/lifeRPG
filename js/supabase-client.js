@@ -388,7 +388,9 @@ function rollChestReward(rarity, profile) {
 }
 
 // Применяет награду: мутирует profile и пишет изменения в БД. Возвращает reward (для UI).
-async function applyChestReward(user, profile, reward) {
+// trackDate=false — для купленных в Магазине сундуков: не трогает last_chest_date,
+// поэтому покупка не блокирует и не блокируется бесплатным сундуком за квесты.
+async function applyChestReward(user, profile, reward, trackDate = true) {
   const fields = {};
   if (reward.type === 'gold') {
     profile.gold += reward.amount;
@@ -418,8 +420,10 @@ async function applyChestReward(user, profile, reward) {
     applyAccentColor(profile.accent_color);
   }
 
-  profile.last_chest_date = localDateStr();
-  fields.last_chest_date = profile.last_chest_date;
+  if (trackDate) {
+    profile.last_chest_date = localDateStr();
+    fields.last_chest_date = profile.last_chest_date;
+  }
 
   if (Object.keys(fields).length > 0) await saveProfileFields(user.id, fields);
   return reward;
@@ -465,7 +469,7 @@ async function saveProfileFields(userId, fields) {
 }
 
 // Загружает файл аватара в Supabase Storage (бакет 'avatars') и возвращает публичную ссылку.
-// Файл кладётся в папку с id пользователя — так политики доступа п
+// Файл кладётся в папку с id пользователя — так политики доступа проще настраивать.
 async function uploadAvatar(userId, file) {
   const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
   const path = `${userId}/avatar_${Date.now()}.${ext}`;
