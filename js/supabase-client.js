@@ -137,6 +137,8 @@ function xpNeededForLevel(level) {
 }
 
 // === Задания: справочники и расчёт наград ===
+const WEEKDAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
 const QUEST_CATEGORIES = [
   { key: 'work', name: 'Работа', icon: '💻' },
   { key: 'study', name: 'Учёба', icon: '📚' },
@@ -151,11 +153,10 @@ const QUEST_CATEGORIES = [
 ];
 
 const QUEST_TYPES = [
-  { key: 'once', name: 'Разовое' },
-  { key: 'daily', name: 'Ежедневное' },
-  { key: 'weekly', name: 'Еженедельное' },
-  { key: 'habit', name: 'Привычка' },
-  { key: 'longterm', name: 'Долгосрочное' },
+  { key: 'daily', name: 'Ежедневное', hint: 'Обычный ежедневный квест. Множитель награды ×1.0.' },
+  { key: 'deadline', name: 'С дедлайном', hint: 'Задача со сроком выполнения — разовая или на будущее. Множитель ×1.2.' },
+  { key: 'weekly', name: 'Еженедельное', hint: 'Выполняется раз в неделю. Повышенный множитель ×1.6 — компенсация за то, что случается реже.' },
+  { key: 'habit', name: 'Привычка', hint: 'Небольшое повторяющееся действие. Базовый множитель ×0.85, но за серию подряд идут бонусы: +20% награды за каждые 7 дней без пропуска (максимум +100%).' },
 ];
 
 const QUEST_PRIORITIES = [
@@ -165,8 +166,14 @@ const QUEST_PRIORITIES = [
   { key: 'critical', name: 'Критический', color: '#D9634F' },
 ];
 
-const TYPE_REWARD_MULTIPLIER = { once: 1.3, daily: 1.0, weekly: 1.6, habit: 0.85, longterm: 1.1 };
+const TYPE_REWARD_MULTIPLIER = { deadline: 1.2, daily: 1.0, weekly: 1.6, habit: 0.85 };
 const MAX_QUEST_XP = 150; // жёсткий потолок — защита от читерства
+
+// Бонус привычки за серию подряд: +20% за каждые полные 7 дней, максимум +100% (5 недель)
+function habitStreakMultiplier(streak) {
+  const weeks = Math.min(Math.floor((streak || 0) / 7), 5);
+  return 1 + weeks * 0.20;
+}
 
 // Автоматический расчёт награды. Ничего не вводится вручную — только сложность/время/тип.
 function calcQuestReward(difficulty, estimatedMinutes, taskType) {
@@ -202,12 +209,18 @@ function isoWeekKey(dateStr) {
 // Нужно ли сбросить отметку "выполнено" у конкретного задания на сегодня
 function questNeedsReset(quest, todayStr) {
   if (!quest.is_completed_today) return false;
-  if (quest.task_type === 'once' || quest.task_type === 'longterm') return false; // разовые/долгосрочные не сбрасываются сами
+  if (quest.task_type === 'deadline') return false; // задачи с дедлайном не сбрасываются сами
   if (!quest.last_completed_date) return true;
   if (quest.task_type === 'weekly') {
     return isoWeekKey(quest.last_completed_date) !== isoWeekKey(todayStr);
   }
   return quest.last_completed_date !== todayStr; // daily и habit — по дню
+}
+
+function addDaysToDateStr(dateStr, days) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return localDateStr(d);
 }
 
 // Общий сброс, вызывается при заходе и на Главную, и в Квесты.
@@ -221,7 +234,7 @@ async function performDailyReset(user, profile, quests) {
     didReset = true;
     previousDate = profile.last_login_date;
     if (profile.last_login_date) {
-      const dailyQuests = quests.filter(q => q.task_type === 'daily' || !q.task_type);
+      const dailyQuests = quests.filter(q => q.task_type === 'daily' || q.task_type === 'habit' || !q.task_type);
       const uncompletedDaily = dailyQuests.filter(q => !q.is_completed_today);
       if (dailyQuests.length > 0 && uncompletedDaily.length === 0) {
         profile.daily_streak += 1;
@@ -244,14 +257,26 @@ async function performDailyReset(user, profile, quests) {
     toReset.forEach(q => { q.is_completed_today = false; });
   }
 
+  // Если привычку пропустили (не выполняли ни вчера, ни сегодня) — её личная серия обнуляется
+  const yesterday = addDaysToDateStr(today, -1);
+  const habitsToResetStreak = quests.filter(q =>
+    q.task_type === 'habit' && (q.habit_streak || 0) > 0 &&
+    q.last_completed_date && q.last_completed_date !== today && q.last_completed_date !== yesterday
+  );
+  if (habitsToResetStreak.length > 0) {
+    await sb.from('quests').update({ habit_streak: 0 }).in('id', habitsToResetStreak.map(q => q.id));
+    habitsToResetStreak.forEach(q => { q.habit_streak = 0; });
+  }
+
   return { didReset, previousDate };
 }
 
 // === Квесты дня и завершение дня ===
 // Общая логика "какие квесты считаются днём" — используется на Главной и в Квестах.
+// Привычки считаются наравне с ежедневными; еженедельные — нет (у них свой цикл).
 function getTodaysRelevantQuests(quests) {
   const today = localDateStr();
-  return quests.filter(q => (q.task_type === 'daily' || !q.task_type) || (q.due_date === today));
+  return quests.filter(q => (q.task_type === 'daily' || q.task_type === 'habit' || !q.task_type) || (q.due_date === today));
 }
 
 // День считается завершённым на 100%, если есть хотя бы 1 квест дня и все они выполнены
