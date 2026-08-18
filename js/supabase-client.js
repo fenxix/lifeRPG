@@ -459,7 +459,8 @@ async function applyChestReward(user, profile, reward, trackDate = true) {
     profile.xp_boost_until = new Date(Date.now() + reward.hours * 3600 * 1000).toISOString();
     fields.xp_boost_mult = profile.xp_boost_mult;
     fields.xp_boost_until = profile.xp_boost_until;
-  } else if (reward.type === 'trophy') CHEST_RARITIES.find(r => r.key === reward.rarity).name, description: reward.item.desc, type: 'trophy', val: 0, icon: reward.item.icon });
+  } else if (reward.type === 'trophy') {
+    await sb.from('inventory_items').insert({ user_id: user.id, name: reward.item.name, rarity: CHEST_RARITIES.find(r => r.key === reward.rarity).name, description: reward.item.desc, type: 'trophy', val: 0, icon: reward.item.icon });
   } else if (reward.type === 'title') {
     profile.unlocked_titles = [...(profile.unlocked_titles || []), reward.title];
     profile.title = reward.title;
@@ -838,5 +839,4 @@ function playRewardReveal(visualEl, iconEmoji) {
   visualEl.style.animation = 'rewardPop .4s ease-out';
   setTimeout(() => { visualEl.style.animation = ''; }, 400);
   if (navigator.vibrate) navigator.vibrate([30, 30, 60]);
-}
-    await sb.from('inventory_items').insert({ user_id: user.id, name: reward.item.name, rarity: C
+    }
