@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>LifeRPG — Питомец</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#D97F4F">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/favicon-32.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/supabase-client.js"></script>
+<style>
+:root {
+  --bg: #FAF3E7; --card: #FFFFFF; --card2: #F3E9D8; --border: #EDE1CC;
+  --terracotta: #D97F4F; --sage: #7D9471; --gold: #C08430; --coral: #E08589;
+  --text: #4A3C2F; --dim: #A8977E; --shadow: 0 6px 20px rgba(74,60,47,.08);
+  --danger: #D9634F;
+}
+html[data-theme="dark"] {
+  --bg: #241E1A; --card: #302722; --card2: #3B3129; --border: #473C33;
+  --text: #F5EAE0; --dim: #B8A594; --shadow: 0 6px 20px rgba(0,0,0,.3);
+  --gold: #E3A857;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh; font-family: 'Nunito', sans-serif;
+  background: var(--bg); color: var(--text); display: flex; justify-content: center; padding: 0;
+  transition: background .2s, color .2s;
+}
+.phone {
+  width: 380px; min-height: 100vh; background: var(--bg);
+  border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+  position: relative; padding-bottom: 78px;
+}
+.icon-emoji { font-style: normal; display: inline-block; line-height: 1; }
+
+.subheader { padding: 18px 18px 12px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 10; background: var(--bg); border-bottom: 1px solid var(--border); }
+.back-btn, .gear-btn { width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--dim); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; box-shadow: var(--shadow); }
+.subheader h1 { font-size: 15px; font-weight: 800; margin: 0; }
+.subheader p { font-size: 11px; color: var(--dim); margin: 2px 0 0; font-weight: 600; }
+
+.section { padding: 16px 18px; }
+.section-title { display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 800; margin-bottom: 10px; }
+.section-title .line { flex: 1; height: 1px; background: linear-gradient(90deg, var(--border), transparent); margin-left: 8px; }
+
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 14px; margin-bottom: 10px; box-shadow: var(--shadow); }
+.card-name { font-size: 13px; font-weight: 800; color: var(--text); }
+.card-desc { font-size: 10px; color: var(--dim); margin-top: 3px; font-weight: 600; }
+
+.bar { height: 8px; background: var(--card2); border-radius: 99px; overflow: hidden; margin: 6px 0 4px; }
+.bar-fill-goal { height: 100%; background: linear-gradient(90deg, var(--sage), #A3BB93); border-radius: 99px; transition: width .3s; }
+.bar-fill-health { height: 100%; border-radius: 99px; transition: width .3s, background .3s; }
+.card-num { font-size: 10px; color: var(--dim); font-weight: 700; }
+
+.btn, .btn-primary { font-family: inherit; font-size: 11px; font-weight: 800; padding: 9px 15px; border-radius: 12px; border: none; color: #fff; background: var(--terracotta); cursor: pointer; }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn-block { width: 100%; padding: 12px 0; text-align: center; }
+.btn-ghost { background: var(--card2); color: var(--text); }
+
+label { display: block; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .02em; margin: 12px 0 6px; font-weight: 700; }
+input[type=text] {
+  width: 100%; padding: 10px 12px; font-family: inherit; font-size: 14px;
+  background: var(--card2); border: 1px solid var(--border); border-radius: 12px;
+  color: var(--text); outline: none;
+}
+input:focus { border-color: var(--terracotta); }
+
+.empty-note { font-size: 12px; color: var(--dim); text-align: center; padding: 14px 0; font-weight: 600; }
+
+.pet-hero { text-align: center; padding: 30px 18px 10px; position: relative; }
+.pet-aura { position: absolute; left: 50%; top: 44px; width: 190px; height: 190px; margin-left: -95px; border-radius: 50%; filter: blur(2px); pointer-events: none; z-index: 0; animation: auraPulse 3.2s ease-in-out infinite; }
+@keyframes auraPulse { 0%,100% { opacity: .55; transform: scale(1); } 50% { opacity: .9; transform: scale(1.06); } }
+.pet-hero-icon { font-size: 76px; line-height: 1; position: relative; z-index: 1; }
+.pet-hero-name { font-size: 19px; font-weight: 800; margin-top: 8px; position: relative; z-index: 1; }
+.pet-hero-stage { font-size: 12px; color: var(--dim); font-weight: 700; margin-top: 2px; position: relative; z-index: 1; }
+.pet-rarity-badge { display: inline-block; margin-top: 6px; font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 999px; position: relative; z-index: 1; }
+.pet-mood-badge { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; padding: 6px 14px; border-radius: 999px; background: var(--card2); font-size: 12px; font-weight: 700; position: relative; z-index: 1; }
+.pet-hero-actions { display: flex; justify-content: center; gap: 8px; margin-top: 12px; position: relative; z-index: 1; }
+.pet-icon-btn { width: 32px; height: 32px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; box-shadow: var(--shadow); }
+
+.bonus-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 700; }
+.bonus-row:last-child { border-bottom: none; }
+.bonus-row .val { color: var(--terracotta); }
+
+.food-item { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.food-item:last-child { border-bottom: none; }
+.food-info { display: flex; align-items: center; gap: 10px; }
+.food-icon { font-size: 20px; width: 30px; text-align: center; }
+.food-name { font-size: 12px; font-weight: 800; }
+.food-sub { font-size: 10px; color: var(--dim); font-weight: 600; margin-top: 1px; }
+.food-count { font-size: 10px; color: var(--dim); font-weight: 700; }
+
+.bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 380px; height: 70px; background: var(--card); border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-around; z-index: 20; }
+.nav-btn { background: none; border: none; display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--dim); font-size: 9px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.nav-btn .icon-emoji { font-size: 17px; }
+.nav-btn.active { color: var(--terracotta); }
+.nav-btn.active .icon-emoji { background: rgba(217,127,79,.14); width: 32px; height: 20px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+
+.drawer { position: fixed; inset: 0; background: rgba(74,60,47,.5); z-index: 50; display: none; justify-content: flex-end; }
+.drawer.open { display: flex; }
+.drawer-panel { width: 280px; height: 100%; background: var(--card); border-left: 1px solid var(--border); padding: 18px; overflow-y: auto; }
+.drawer-item { display: flex; align-items: center; gap: 10px; padding: 11px 10px; border-radius: 10px; color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; }
+.drawer-item:hover { background: var(--card2); }
+.drawer-close { width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--border); background: var(--card2); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; margin-bottom: 12px; }
+
+.modal-overlay { position: fixed; inset: 0; background: rgba(74,60,47,.5); z-index: 60; display: none; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.open { display: flex; }
+.modal-box { width: 100%; max-width: 320px; background: var(--card); border-radius: 22px; padding: 20px; box-shadow: var(--shadow); }
+
+.loading { text-align: center; padding: 60px 20px; color: var(--dim); font-size: 13px; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="phone" id="app" style="display:none;">
+  <div class="subheader">
+    <button class="back-btn" onclick="location.href='index.html'"><span class="icon-emoji">⬅️</span></button>
+    <div style="flex:1;">
+      <h1>Питомец</h1>
+      <p>Растёт вместе с тобой</p>
+    </div>
+  </div>
+
+  <div id="pet-empty" class="section" style="display:none;">
+    <div class="card" style="text-align:center;padding:30px 16px;">
+      <div style="font-size:44px;">🥚</div>
+      <div class="card-name" style="margin-top:8px;">Питомца пока нет</div>
+      <div class="card-desc">Открой яйцо в Магазине, чтобы найти себе спутника</div>
+      <button class="btn btn-block" style="margin-top:14px;" onclick="location.href='shop.html'">В Магазин</button>
+    </div>
+  </div>
+
+  <div id="pet-content" style="display:none;">
+    <div class="pet-hero">
+      <div class="pet-aura" id="pet-aura"></div>
+      <div class="pet-hero-icon" id="pet-icon">🐉</div>
+      <div class="pet-hero-name" id="pet-name-display">—</div>
+      <div class="pet-hero-stage" id="pet-stage-display">—</div>
+      <div class="pet-rarity-badge" id="pet-rarity-badge">—</div>
+      <div><div class="pet-mood-badge"><span id="pet-mood-emoji"></span> <span id="pet-mood-label"></span></div></div>
+      <div class="pet-hero-actions">
+        <button class="pet-icon-btn" title="Переименовать" onclick="openDrawer('rename-drawer')"><span class="icon-emoji">⚙️</span></button>
+        <button class="pet-icon-btn" title="История" onclick="openHistoryModal()"><span class="icon-emoji">📖</span></button>
+      </div>
+    </div>
+
+    <div class="section" style="padding-top:6px;">
+      <div class="section-title">Опыт <span class="line"></span></div>
+      <div class="card">
+        <div class="bar"><div class="bar-fill-goal" id="pet-xp-bar" style="width:0%"></div></div>
+        <div class="card-num" id="pet-xp-label">0 / 40 XP</div>
+      </div>
+    </div>
+
+    <div class="section" style="padding-top:0;" id="pet-health-section">
+      <div class="section-title">Самочувствие <span class="line"></span></div>
+      <div class="card">
+        <div class="bar"><div class="bar-fill-health" id="pet-health-bar" style="width:100%"></div></div>
+        <div class="card-num" id="pet-health-label">100 / 100</div>
+        <div class="card-desc" id="pet-health-hint" style="margin-top:6px;"></div>
+      </div>
+    </div>
+
+    <div class="section" style="padding-top:0;">
+      <div class="section-title">Бонусы питомцу <span class="line"></span></div>
+      <div class="card">
+        <div class="bonus-row"><span>Бонус к XP игрока</span><span class="val" id="pet-bonus-xp">+0%</span></div>
+        <div class="bonus-row"><span>Доп. урон боссам</span><span class="val" id="pet-bonus-boss">+0%</span></div>
+      </div>
+      <div class="card-desc" style="padding:0 4px;" id="pet-bonus-hint"></div>
+    </div>
+
+    <div class="section" style="padding-top:0;">
+      <div class="section-title">Кормление <span class="line"></span></div>
+      <div class="card-desc" style="padding:0 4px 8px;" id="pet-diet-hint"></div>
+      <div class="card" id="pet-food-card">
+        <div id="pet-food-list"></div>
+        <div class="empty-note" id="pet-food-empty" style="display:none;">Еды нет — купи корм в Магазине (категория «Корм»)</div>
+        <button class="btn btn-block btn-ghost" style="margin-top:10px;" onclick="location.href='shop.html'">В Магазин за кормом</button>
+      </div>
+    </div>
+
+    <div class="section" style="padding-top:0;">
+      <div class="section-title">Новое яйцо <span class="line"></span></div>
+      <div class="card-desc" style="padding:0 4px 6px;">Открытие нового яйца заменит текущего питомца — расти его придётся заново.</div>
+      <button class="btn btn-block" onclick="location.href='shop.html'">В Магазин за яйцом</button>
+    </div>
+  </div>
+
+  <div class="bottom-nav">
+    <button class="nav-btn" onclick="location.href='index.html'"><span class="icon-emoji">🏠</span>Главная</button>
+    <button class="nav-btn" onclick="location.href='quests.html'"><span class="icon-emoji">📜</span>Квесты</button>
+    <button class="nav-btn" onclick="location.href='world.html'"><span class="icon-emoji">🗺️</span>Мир</button>
+    <button class="nav-btn" onclick="location.href='inventory.html'"><span class="icon-emoji">🎒</span>Инвентарь</button>
+    <button class="nav-btn" onclick="location.href='profile.html'"><span class="icon-emoji">👤</span>Профиль</button>
+  </div>
+
+  <div class="drawer" id="rename-drawer">
+    <div class="drawer-panel">
+      <button class="drawer-close" onclick="closeDrawer('rename-drawer')"><span class="icon-emoji">✕</span></button>
+      <label style="margin-top:0;">Имя питомца</label>
+      <input type="text" id="pet-name-input">
+      <button class="btn btn-block" style="margin-top:10px;" onclick="savePetName()">Сохранить</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="history-modal">
+    <div class="modal-box">
+      <div style="text-align:center;">
+        <div style="font-size:44px;" id="history-icon">🐉</div>
+        <div style="font-size:16px;font-weight:800;margin-top:6px;" id="history-name">—</div>
+        <div style="font-size:11px;font-weight:800;margin-top:2px;" id="history-rarity">—</div>
+      </div>
+      <div style="font-size:13px;line-height:1.5;color:var(--text);font-weight:600;margin-top:14px;" id="history-story">—</div>
+      <div class="card-desc" style="margin-top:12px;" id="history-diet">—</div>
+      <button class="btn btn-block" style="margin-top:16px;" onclick="closeModal('history-modal')">Закрыть</button>
+    </div>
+  </div>
+</div>
+<div class="loading" id="loading-screen">Ищем питомца...</div>
+
+<script>
+  let user, profile, invItems = [];
+
+  async function init() {
+    user = await requireAuth();
+    if (!user) return;
+    profile = await getProfile(user.id);
+    if (profile.accent_color) applyAccentColor(profile.accent_color);
+
+    await loadFood();
+    render();
+    document.getElementById('loading-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+  }
+
+  async function loadFood() {
+    const { data } = await sb.from('inventory_items').select('*').eq('user_id', user.id).eq('type', 'pet_food').order('created_at', { ascending: true });
+    invItems = data || [];
+  }
+
+  function openDrawer(id) { document.getElementById(id).classList.add('open'); }
+  function closeDrawer(id) { document.getElementById(id).classList.remove('open'); }
+
+  function render() {
+    if (!profile.pet_species) {
+      document.getElementById('pet-empty').style.display = 'block';
+      document.getElementById('pet-content').style.display = 'none';
+      return;
+    }
+    document.getElementById('pet-empty').style.display = 'none';
+    document.getElementById('pet-content').style.display = 'block';
+
+    const sp = petSpeciesDef(profile);
+    const rarityInfo = petRarityInfo(profile.pet_rarity);
+
+    document.getElementById('pet-icon').innerText = petVisual(profile);
+    document.getElementById('pet-name-display').innerText = profile.pet_name;
+    document.getElementById('pet-name-input').value = profile.pet_name;
+    document.getElementById('pet-stage-display').innerText = `${petStageName(profile.pet_level, profile.pet_mutated)} · Ур. ${profile.pet_level}`;
+
+    const badge = document.getElementById('pet-rarity-badge');
+    badge.innerText = rarityInfo.name;
+    badge.style.background = rarityInfo.color + '26';
+    badge.style.color = rarityInfo.color;
+
+    const aura = document.getElementById('pet-aura');
+    aura.style.background = `radial-gradient(circle, ${rarityInfo.color}55, ${rarityInfo.color}11 55%, transparent 75%)`;
+
+    const mood = petMood(profile);
+    document.getElementById('pet-mood-emoji').innerText = mood.emoji;
+    document.getElementById('pet-mood-label').innerText = mood.label;
+
+    const needed = petXpNeeded(profile.pet_level || 1);
+    document.getElementById('pet-xp-bar').style.width = Math.min(100, Math.round(((profile.pet_xp || 0) / needed) * 100)) + '%';
+    document.getElementById('pet-xp-label').innerText = `${profile.pet_xp || 0} / ${needed} XP`;
+
+    const health = profile.pet_health ?? 100;
+    const healthBar = document.getElementById('pet-health-bar');
+    healthBar.style.width = health + '%';
+    healthBar.style.background = health <= 30 ? 'linear-gradient(90deg, var(--danger), #E08589)' : health <= 60 ? 'linear-gradient(90deg, var(--gold), #E3A857)' : 'linear-gradient(90deg, var(--sage), #A3BB93)';
+    document.getElementById('pet-health-label').innerText = `${health} / 100`;
+    const healthHint = document.getElementById('pet-health-hint');
+    if (profile.pet_poisoned) healthHint.innerText = '🤒 Отравлен неправильной едой — покорми тем, что питомец действительно ест, чтобы вылечить.';
+    else if (health < 100) healthHint.innerText = 'Постепенно восстанавливается от подходящей еды.';
+    else healthHint.innerText = 'Всё в порядке.';
+
+    const xpBonus = Math.round(petXpBonus(profile) * 100);
+    const bossBonus = Math.round(petBossDamageBonus(profile) * 100);
+    document.getElementById('pet-bonus-xp').innerText = `+${xpBonus}%`;
+    document.getElementById('pet-bonus-boss').innerText = `+${bossBonus}%`;
+    document.getElementById('pet-bonus-hint').innerText = (profile.pet_level || 0) < 20
+      ? `Бонус к XP раскроется на 20 уровне питомца (сейчас ${profile.pet_level})`
+      : (profile.pet_mutated ? 'Питомец мутировал — бонус максимальный' : 'Бонус растёт с редкостью и мутацией питомца');
+
+    const dietLabels = sp.diet.map(t => `${FOOD_TYPE_LABELS[t].icon} ${FOOD_TYPE_LABELS[t].label}`).join(', ');
+    document.getElementById('pet-diet-hint').innerText = `${profile.pet_name} ест: ${dietLabels}. Другая еда (кроме эликсира) может отравить.`;
+
+    renderFoodList();
+  }
+
+  function renderFoodList() {
+    const list = document.getElementById('pet-food-list');
+    const empty = document.getElementById('pet-food-empty');
+    if (!invItems.length) {
+      list.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    const sp = petSpeciesDef(profile);
+    list.innerHTML = invItems.map(it => {
+      const def = getPetFoodDef(it.name);
+      if (!def) return '';
+      const liked = def.mutate || sp.diet.includes(def.type);
+      const typeInfo = FOOD_TYPE_LABELS[def.type];
+      return `
+        <div class="food-item">
+          <div class="food-info">
+            <div class="food-icon">${def.icon}</div>
+            <div>
+              <div class="food-name">${def.name}</div>
+              <div class="food-sub">${typeInfo.label}${liked ? '' : ' · не любит'}</div>
+            </div>
+          </div>
+          <button class="btn" style="${liked ? '' : 'background:var(--danger);'}" onclick="feedFromPage('${it.id}')">Дать</button>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function feedFromPage(itemId) {
+    const item = invItems.find(i => i.id === itemId);
+    if (!item) return;
+    const def = getPetFoodDef(item.name);
+    if (!def) return;
+    const sp = petSpeciesDef(profile);
+    const liked = def.mutate || sp.diet.includes(def.type);
+    if (!liked) {
+      const ok = confirm(`${profile.pet_name} не ест «${item.name}» — питомец может отравиться. Всё равно покормить?`);
+      if (!ok) return;
+    }
+
+    const result = feedPet(profile, def);
+    if (result.refused) { showToast(result.refused); return; }
+
+    invItems = invItems.filter(i => i.id !== itemId);
+    await sb.from('inventory_items').delete().eq('id', itemId);
+
+    if (result.wrongFood) {
+      if (result.died) {
+        showToast(`😔 ${profile.pet_name} не пережил отравление...`);
+        await releaseDeadPet(user, profile);
+        render();
+        return;
+      }
+      showToast(`🤒 Питомцу не понравилось — здоровье −${result.healthLoss}`);
+      await saveProfileFields(user.id, { pet_health: profile.pet_health, pet_poisoned: profile.pet_poisoned, pet_bad_streak: profile.pet_bad_streak });
+    } else {
+      let msg = `${item.name}: +${result.xpGained} XP`;
+      if (result.bonusGold) msg += `, +${result.bonusGold} золота`;
+      if (result.healed) msg += ' — здоровье восстановлено';
+      if (result.leveled) msg += ' — новый уровень!';
+      if (result.mutated) msg += ' — мутация!';
+      showToast(msg);
+      await saveProfileFields(user.id, {
+        pet_xp: profile.pet_xp, pet_level: profile.pet_level, pet_mutated: profile.pet_mutated,
+        pet_last_fed_date: profile.pet_last_fed_date, pet_health: profile.pet_health, pet_poisoned: profile.pet_poisoned,
+        pet_bad_streak: profile.pet_bad_streak, gold: profile.gold,
+      });
+    }
+    render();
+  }
+
+  function openHistoryModal() {
+    const sp = petSpeciesDef(profile);
+    const rarityInfo = petRarityInfo(profile.pet_rarity);
+    document.getElementById('history-icon').innerText = sp.icon;
+    document.getElementById('history-name').innerText = profile.pet_name;
+    const rarityEl = document.getElementById('history-rarity');
+    rarityEl.innerText = rarityInfo.name;
+    rarityEl.style.color = rarityInfo.color;
+    document.getElementById('history-story').innerText = sp.story;
+    const dietLabels = sp.diet.map(t => `${FOOD_TYPE_LABELS[t].icon} ${FOOD_TYPE_LABELS[t].label}`).join(', ');
+    document.getElementById('history-diet').innerText = `Рацион: ${dietLabels}`;
+    openModal('history-modal');
+  }
+
+  async function savePetName() {
+    const val = document.getElementById('pet-name-input').value.trim();
+    if (!val) return;
+    profile.pet_name = val;
+    await saveProfileFields(user.id, { pet_name: val });
+    closeDrawer('rename-drawer');
+    render();
+    showToast('Имя сохранено');
+  }
+
+  init();
+</script>
+</body>
+</html>
