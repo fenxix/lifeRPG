@@ -459,8 +459,7 @@ async function applyChestReward(user, profile, reward, trackDate = true) {
     profile.xp_boost_until = new Date(Date.now() + reward.hours * 3600 * 1000).toISOString();
     fields.xp_boost_mult = profile.xp_boost_mult;
     fields.xp_boost_until = profile.xp_boost_until;
-  } else if (reward.type === 'trophy') {
-    await sb.from('inventory_items').insert({ user_id: user.id, name: reward.item.name, rarity: CHEST_RARITIES.find(r => r.key === reward.rarity).name, description: reward.item.desc, type: 'trophy', val: 0, icon: reward.item.icon });
+  } else if (reward.type === 'trophy') CHEST_RARITIES.find(r => r.key === reward.rarity).name, description: reward.item.desc, type: 'trophy', val: 0, icon: reward.item.icon });
   } else if (reward.type === 'title') {
     profile.unlocked_titles = [...(profile.unlocked_titles || []), reward.title];
     profile.title = reward.title;
@@ -513,19 +512,31 @@ function getDailyRareItem() {
 const PET_XP_PER_LEVEL = 40;
 function petXpNeeded(level) { return level * PET_XP_PER_LEVEL; }
 
+// diet: какие типы еды питомец ест нормально (см. FOOD_TYPE_LABELS). Всё остальное — "не та еда".
+// story: лор-текст для плашки "История" на странице питомца.
 const PET_SPECIES = [
   // Обычное яйцо
-  { key: 'firetail', name: 'Огнехвост', icon: '🦎', rarity: 'common', egg: 'common' },
-  { key: 'fluffy', name: 'Пушистик', icon: '🐹', rarity: 'common', egg: 'common' },
-  { key: 'falcon', name: 'Соколёнок', icon: '🦅', rarity: 'rare', egg: 'common' },
-  { key: 'mooncat', name: 'Лунный кот', icon: '🐱', rarity: 'rare', egg: 'common' },
-  { key: 'golem', name: 'Каменный голем', icon: '🗿', rarity: 'epic', egg: 'common' },
+  { key: 'firetail', name: 'Огнехвост', icon: '🦎', rarity: 'common', egg: 'common', diet: ['bug', 'meat'],
+    story: 'Вылупляется из тёплой земли у самых старых кострищ — говорят, огонь оставляет в яйце частицу себя. Обожает хрустящих жуков и мясо: чем сытнее укус, тем ярче тлеет хвост по вечерам.' },
+  { key: 'fluffy', name: 'Пушистик', icon: '🐹', rarity: 'common', egg: 'common', diet: ['plant', 'sweet'],
+    story: 'Найден в стоге сена на окраине деревни — просто однажды прибежал и отказался уходить. Мясо на дух не переносит, зато готов на всё ради сладкого и свежей травы.' },
+  { key: 'falcon', name: 'Соколёнок', icon: '🦅', rarity: 'rare', egg: 'common', diet: ['meat', 'fish'],
+    story: 'Выпал из гнезда высоко в горах и был выхожен вручную — с тех пор не отходит ни на шаг. Настоящий хищник: любит мясо и свежую рыбу, а вот сладкое даже не понюхает.' },
+  { key: 'mooncat', name: 'Лунный кот', icon: '🐱', rarity: 'rare', egg: 'common', diet: ['fish', 'sweet'],
+    story: 'Появляется только в полнолуние — приходит на свет фонаря и садится рядом, будто был знаком всегда. Обожает рыбу и что-нибудь сладкое на десерт.' },
+  { key: 'golem', name: 'Каменный голем', icon: '🗿', rarity: 'epic', egg: 'common', diet: ['plant'],
+    story: 'Слепленный из речной глины и старого мха древним ремесленником, он ожил, когда мох в трещинах пророс насквозь. Питается исключительно растениями — камню нужен только мох, всё остальное он даже не замечает.' },
   // Тёмное яйцо
-  { key: 'shadowwolf', name: 'Теневой волк', icon: '🐺', rarity: 'common', egg: 'dark' },
-  { key: 'swampspirit', name: 'Болотный дух', icon: '👻', rarity: 'rare', egg: 'dark' },
-  { key: 'stormgriffin', name: 'Штормовой грифон', icon: '🦇', rarity: 'rare', egg: 'dark' },
-  { key: 'crystalserpent', name: 'Кристальный змей', icon: '🐍', rarity: 'epic', egg: 'dark' },
-  { key: 'ancientdragon', name: 'Древний дракон', icon: '🐉', rarity: 'legendary', egg: 'dark' },
+  { key: 'shadowwolf', name: 'Теневой волк', icon: '🐺', rarity: 'common', egg: 'dark', diet: ['meat'],
+    story: 'Родился из тени, отброшенной старым дубом в безлунную ночь. Признаёт только мясо — хищник до мозга костей, остальную еду обходит стороной.' },
+  { key: 'swampspirit', name: 'Болотный дух', icon: '👻', rarity: 'rare', egg: 'dark', diet: ['bug', 'plant'],
+    story: 'Поднимается из тумана над трясиной, куда никто не заходит после заката. Кормится жуками и болотными травами — остальное считает "сухой едой не по духу".' },
+  { key: 'stormgriffin', name: 'Штормовой грифон', icon: '🦇', rarity: 'rare', egg: 'dark', diet: ['meat', 'fish'],
+    story: 'Вылупился прямо в грозу — говорят, молния попала в яйцо и не разбила, а разбудила его. Ест только мясо и рыбу, пойманные им самим "на лету".' },
+  { key: 'crystalserpent', name: 'Кристальный змей', icon: '🐍', rarity: 'epic', egg: 'dark', diet: ['bug'],
+    story: 'Найден свернувшимся в жиле горного хрусталя — чешуя до сих пор мерцает гранями. Крайне переборчив: ест только жуков, любую другую еду отказывается даже пробовать — и она ему вредит.' },
+  { key: 'ancientdragon', name: 'Древний дракон', icon: '🐉', rarity: 'legendary', egg: 'dark', diet: ['meat', 'fish', 'sweet'],
+    story: 'По легенде — последнее яйцо из кладки дракона, что тысячу лет назад уснул под горой. Ест почти всё съедобное разом — мясо, рыбу и сладкое, — но никогда траву или жуков.' },
 ];
 
 const PET_EGGS = {
@@ -533,8 +544,23 @@ const PET_EGGS = {
   dark: { key: 'dark', name: 'Тёмное яйцо', icon: '🌑', price: 1800, weights: { common: 20, rare: 40, epic: 25, legendary: 15 } },
 };
 
+// Читаемые названия и иконки типов еды
+const FOOD_TYPE_LABELS = {
+  meat: { label: 'Мясо', icon: '🍗' },
+  bug: { label: 'Жуки', icon: '🪲' },
+  fish: { label: 'Рыба', icon: '🐟' },
+  plant: { label: 'Трава', icon: '🌿' },
+  sweet: { label: 'Сладкое', icon: '🍬' },
+  elixir: { label: 'Эликсир', icon: '🧪' },
+};
+
 function petSpeciesDef(profile) {
   return PET_SPECIES.find(s => s.key === profile.pet_species) || null;
+}
+
+// Название/цвет редкости — переиспользует таблицу редкостей сундуков
+function petRarityInfo(rarity) {
+  return CHEST_RARITIES.find(r => r.key === rarity) || { name: rarity, color: '#A8977E' };
 }
 
 function petStageBadge(level, mutated) {
@@ -601,15 +627,43 @@ async function applyNewPet(user, profile, species) {
   profile.pet_xp = 0;
   profile.pet_mutated = false;
   profile.pet_last_fed_date = null;
+  profile.pet_health = 100;
+  profile.pet_poisoned = false;
+  profile.pet_bad_streak = 0;
+  const discovered = new Set(profile.pet_discovered || []);
+  discovered.add(species.key);
+  profile.pet_discovered = Array.from(discovered);
   await saveProfileFields(user.id, {
     pet_species: profile.pet_species, pet_rarity: profile.pet_rarity, pet_name: profile.pet_name,
     pet_level: profile.pet_level, pet_xp: profile.pet_xp, pet_mutated: false, pet_last_fed_date: null,
+    pet_health: 100, pet_poisoned: false, pet_bad_streak: 0, pet_discovered: profile.pet_discovered,
+  });
+}
+
+// Питомец умер от долгого неправильного кормления — сбрасывает его, но сохраняет коллекцию открытых видов
+async function releaseDeadPet(user, profile) {
+  profile.pet_species = null;
+  profile.pet_rarity = null;
+  profile.pet_name = null;
+  profile.pet_level = 1;
+  profile.pet_xp = 0;
+  profile.pet_mutated = false;
+  profile.pet_last_fed_date = null;
+  profile.pet_health = 100;
+  profile.pet_poisoned = false;
+  profile.pet_bad_streak = 0;
+  await saveProfileFields(user.id, {
+    pet_species: null, pet_rarity: null, pet_name: null, pet_level: 1, pet_xp: 0, pet_mutated: false,
+    pet_last_fed_date: null, pet_health: 100, pet_poisoned: false, pet_bad_streak: 0,
   });
 }
 
 // Настроение питомца
 function petMood(profile) {
   if (!profile.pet_species) return null;
+  const health = profile.pet_health ?? 100;
+  if (health <= 30) return { emoji: '🤢', label: 'Плохо себя чувствует' };
+  if (profile.pet_poisoned) return { emoji: '🤒', label: 'Отравлен' };
   const today = localDateStr();
   if (profile.pet_last_fed_date === today) return { emoji: '😄', label: 'Счастлив' };
   if ((profile.daily_streak || 0) === 0) return { emoji: '😢', label: 'Грустит' };
@@ -617,10 +671,15 @@ function petMood(profile) {
 }
 
 // === Еда для питомца — покупается в Магазине, попадает в инвентарь, "используется" оттуда ===
+// type определяет, каким питомцам эта еда подходит (см. diet у PET_SPECIES в FOOD_TYPE_LABELS)
 const PET_FOOD_ITEMS = [
-  { name: 'Корм для питомца', icon: '🍗', price: 20, xpMin: 15, xpMax: 25, bonusChance: 0.08, bonusGoldMin: 5, bonusGoldMax: 15, desc: 'Немного XP питомцу, изредка находит золото' },
-  { name: 'Лакомство', icon: '🍖', price: 100, xpMin: 40, xpMax: 60, bonusChance: 0.18, bonusGoldMin: 20, bonusGoldMax: 40, desc: 'Питомец в восторге — больше XP и шанс находки' },
-  { name: 'Мутагенный эликсир', icon: '🧪', price: 3000, xpMin: 80, xpMax: 120, bonusChance: 0, mutate: true, desc: 'Мутирует питомца, усиливая его. Нужен 30 уровень питомца' },
+  { name: 'Мясной паёк', icon: '🍗', price: 20, type: 'meat', xpMin: 15, xpMax: 25, bonusChance: 0.08, bonusGoldMin: 5, bonusGoldMax: 15, desc: 'Простое мясо для хищных питомцев' },
+  { name: 'Отборное мясо', icon: '🥩', price: 60, type: 'meat', xpMin: 25, xpMax: 35, bonusChance: 0.12, bonusGoldMin: 10, bonusGoldMax: 20, desc: 'Мясо получше — сытнее и больше XP' },
+  { name: 'Хрустящие жуки', icon: '🪲', price: 15, type: 'bug', xpMin: 12, xpMax: 20, bonusChance: 0.06, bonusGoldMin: 5, bonusGoldMax: 10, desc: 'Горсть жуков — деликатес для некоторых' },
+  { name: 'Свежая рыба', icon: '🐟', price: 25, type: 'fish', xpMin: 18, xpMax: 28, bonusChance: 0.08, bonusGoldMin: 5, bonusGoldMax: 15, desc: 'Улов дня, любят водные и крылатые питомцы' },
+  { name: 'Сочная трава', icon: '🌿', price: 15, type: 'plant', xpMin: 12, xpMax: 20, bonusChance: 0.06, bonusGoldMin: 5, bonusGoldMax: 10, desc: 'Травы и мох для травоядных питомцев' },
+  { name: 'Лакомство', icon: '🍬', price: 100, type: 'sweet', xpMin: 40, xpMax: 60, bonusChance: 0.18, bonusGoldMin: 20, bonusGoldMax: 40, desc: 'Питомец в восторге — больше XP и шанс находки' },
+  { name: 'Мутагенный эликсир', icon: '🧪', price: 3000, type: 'elixir', xpMin: 80, xpMax: 120, bonusChance: 0, mutate: true, desc: 'Мутирует питомца, усиливая его. Нужен 30 уровень питомца. Едят все' },
 ];
 
 function getPetFoodDef(name) {
@@ -628,22 +687,43 @@ function getPetFoodDef(name) {
 }
 
 // Кормит питомца конкретным предметом еды. Мутирует profile. Возвращает результат для UI.
+// Если еда не подходит виду (не входит в его diet) — питомец травится вместо того, чтобы получить XP.
+// При долгом кормлении неправильной едой без "лечения" нормальной есть очень маленький шанс, что питомец погибнет.
 function feedPet(profile, foodDef) {
+  const sp = petSpeciesDef(profile);
+  if (!sp) return { refused: 'Питомца нет' };
+
   if (foodDef.mutate) {
     if ((profile.pet_level || 0) < 30) return { refused: 'Питомец ещё не дорос — нужен 30 уровень' };
     if (profile.pet_mutated) return { refused: 'Питомец уже мутировал' };
     profile.pet_mutated = true;
+  } else if (!sp.diet.includes(foodDef.type)) {
+    // Неправильная еда — травит питомца
+    const healthLoss = Math.floor(Math.random() * 15) + 10; // 10-24
+    profile.pet_health = Math.max(0, (profile.pet_health ?? 100) - healthLoss);
+    profile.pet_poisoned = true;
+    profile.pet_bad_streak = (profile.pet_bad_streak || 0) + 1;
+    let died = false;
+    if (profile.pet_bad_streak >= 3 && profile.pet_health <= 25 && Math.random() < 0.04) {
+      died = true;
+    }
+    return { wrongFood: true, healthLoss, died, health: profile.pet_health };
   }
+
   const xpGained = Math.floor(Math.random() * (foodDef.xpMax - foodDef.xpMin + 1)) + foodDef.xpMin;
   profile.pet_xp = (profile.pet_xp || 0) + xpGained;
   profile.pet_last_fed_date = localDateStr();
+  const wasUnwell = !!profile.pet_poisoned || (profile.pet_health ?? 100) < 100;
+  profile.pet_health = Math.min(100, (profile.pet_health ?? 100) + 15);
+  profile.pet_poisoned = false;
+  profile.pet_bad_streak = 0;
   const leveled = checkPetLevelUp(profile);
   let bonusGold = 0;
   if (foodDef.bonusChance && Math.random() < foodDef.bonusChance) {
     bonusGold = Math.floor(Math.random() * (foodDef.bonusGoldMax - foodDef.bonusGoldMin + 1)) + foodDef.bonusGoldMin;
     profile.gold += bonusGold;
   }
-  return { xpGained, bonusGold, leveled, mutated: !!foodDef.mutate };
+  return { xpGained, bonusGold, leveled, mutated: !!foodDef.mutate, healed: wasUnwell };
 }
 
 async function logActivity(userId, eventType, description) {
@@ -759,3 +839,4 @@ function playRewardReveal(visualEl, iconEmoji) {
   setTimeout(() => { visualEl.style.animation = ''; }, 400);
   if (navigator.vibrate) navigator.vibrate([30, 30, 60]);
 }
+    await sb.from('inventory_items').insert({ user_id: user.id, name: reward.item.name, rarity: C
