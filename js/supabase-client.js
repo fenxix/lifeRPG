@@ -509,6 +509,143 @@ function getDailyRareItem() {
   return { ...item, price: 2000, expiresAt: midnight };
 }
 
+// === Питомец ===
+const PET_XP_PER_LEVEL = 40;
+function petXpNeeded(level) { return level * PET_XP_PER_LEVEL; }
+
+const PET_SPECIES = [
+  // Обычное яйцо
+  { key: 'firetail', name: 'Огнехвост', icon: '🦎', rarity: 'common', egg: 'common' },
+  { key: 'fluffy', name: 'Пушистик', icon: '🐹', rarity: 'common', egg: 'common' },
+  { key: 'falcon', name: 'Соколёнок', icon: '🦅', rarity: 'rare', egg: 'common' },
+  { key: 'mooncat', name: 'Лунный кот', icon: '🐱', rarity: 'rare', egg: 'common' },
+  { key: 'golem', name: 'Каменный голем', icon: '🗿', rarity: 'epic', egg: 'common' },
+  // Тёмное яйцо
+  { key: 'shadowwolf', name: 'Теневой волк', icon: '🐺', rarity: 'common', egg: 'dark' },
+  { key: 'swampspirit', name: 'Болотный дух', icon: '👻', rarity: 'rare', egg: 'dark' },
+  { key: 'stormgriffin', name: 'Штормовой грифон', icon: '🦇', rarity: 'rare', egg: 'dark' },
+  { key: 'crystalserpent', name: 'Кристальный змей', icon: '🐍', rarity: 'epic', egg: 'dark' },
+  { key: 'ancientdragon', name: 'Древний дракон', icon: '🐉', rarity: 'legendary', egg: 'dark' },
+];
+
+const PET_EGGS = {
+  common: { key: 'common', name: 'Обычное яйцо', icon: '🥚', price: 500, weights: { common: 55, rare: 35, epic: 10 } },
+  dark: { key: 'dark', name: 'Тёмное яйцо', icon: '🌑', price: 1800, weights: { common: 20, rare: 40, epic: 25, legendary: 15 } },
+};
+
+function petSpeciesDef(profile) {
+  return PET_SPECIES.find(s => s.key === profile.pet_species) || null;
+}
+
+function petStageBadge(level, mutated) {
+  if (mutated) return '✨';
+  if (level >= 30) return '👑';
+  if (level >= 10) return '🌟';
+  return '';
+}
+
+function petStageName(level, mutated) {
+  if (mutated) return 'Мутант';
+  if (level >= 30) return 'Взрослый';
+  if (level >= 10) return 'Юный';
+  return 'Детёныш';
+}
+
+function petVisual(profile) {
+  const sp = petSpeciesDef(profile);
+  if (!sp) return '🥚';
+  return `${petStageBadge(profile.pet_level || 1, profile.pet_mutated)}${sp.icon}`;
+}
+
+// Бонус к XP игрока от питомца — раскрывается на "Юный"+ уровне (20+)
+function petXpBonus(profile) {
+  const sp = petSpeciesDef(profile);
+  if (!sp || (profile.pet_level || 0) < 20) return 0;
+  if (profile.pet_mutated) return 0.08; // мутировавший всегда даёт максимум
+  return { common: 0.02, rare: 0.03, epic: 0.05, legendary: 0.08 }[sp.rarity] || 0;
+}
+
+// Бонус к урону по боссу от питомца — растёт с уровнем, потолок +20%
+function petBossDamageBonus(profile) {
+  if (!profile.pet_species) return 0;
+  return Math.min(0.20, (profile.pet_level || 0) * 0.005);
+}
+
+// Мутирует profile (pet_level, pet_xp) пока хватает XP питомца. Возвращает true если был левел-ап
+function checkPetLevelUp(profile) {
+  if (!profile.pet_species) return false;
+  let leveled = false;
+  let needed = petXpNeeded(profile.pet_level || 1);
+  while ((profile.pet_xp || 0) >= needed) {
+    profile.pet_xp -= needed;
+    profile.pet_level = (profile.pet_level || 1) + 1;
+    needed = petXpNeeded(profile.pet_level);
+    leveled = true;
+  }
+  return leveled;
+}
+
+// Открывает яйцо: возвращает выбранный вид питомца (ещё не применённый)
+function rollEggPet(eggKey) {
+  const egg = PET_EGGS[eggKey];
+  const candidates = PET_SPECIES.filter(s => s.egg === eggKey).map(s => ({ ...s, weight: egg.weights[s.rarity] || 1 }));
+  return weightedPick(candidates);
+}
+
+// Применяет нового питомца из яйца — заменяет текущего, если был. Мутирует profile и пишет в БД.
+async function applyNewPet(user, profile, species) {
+  profile.pet_species = species.key;
+  profile.pet_rarity = species.rarity;
+  profile.pet_name = species.name;
+  profile.pet_level = 1;
+  profile.pet_xp = 0;
+  profile.pet_mutated = false;
+  profile.pet_last_fed_date = null;
+  await saveProfileFields(user.id, {
+    pet_species: profile.pet_species, pet_rarity: profile.pet_rarity, pet_name: profile.pet_name,
+    pet_level: profile.pet_level, pet_xp: profile.pet_xp, pet_mutated: false, pet_last_fed_date: null,
+  });
+}
+
+// Настроение питомца
+function petMood(profile) {
+  if (!profile.pet_species) return null;
+  const today = localDateStr();
+  if (profile.pet_last_fed_date === today) return { emoji: '😄', label: 'Счастлив' };
+  if ((profile.daily_streak || 0) === 0) return { emoji: '😢', label: 'Грустит' };
+  return { emoji: '😐', label: 'Проголодался' };
+}
+
+// === Еда для питомца — покупается в Магазине, попадает в инвентарь, "используется" оттуда ===
+const PET_FOOD_ITEMS = [
+  { name: 'Корм для питомца', icon: '🍗', price: 20, xpMin: 15, xpMax: 25, bonusChance: 0.08, bonusGoldMin: 5, bonusGoldMax: 15, desc: 'Немного XP питомцу, изредка находит золото' },
+  { name: 'Лакомство', icon: '🍖', price: 100, xpMin: 40, xpMax: 60, bonusChance: 0.18, bonusGoldMin: 20, bonusGoldMax: 40, desc: 'Питомец в восторге — больше XP и шанс находки' },
+  { name: 'Мутагенный эликсир', icon: '🧪', price: 3000, xpMin: 80, xpMax: 120, bonusChance: 0, mutate: true, desc: 'Мутирует питомца, усиливая его. Нужен 30 уровень питомца' },
+];
+
+function getPetFoodDef(name) {
+  return PET_FOOD_ITEMS.find(f => f.name === name) || null;
+}
+
+// Кормит питомца конкретным предметом еды. Мутирует profile. Возвращает результат для UI.
+function feedPet(profile, foodDef) {
+  if (foodDef.mutate) {
+    if ((profile.pet_level || 0) < 30) return { refused: 'Питомец ещё не дорос — нужен 30 уровень' };
+    if (profile.pet_mutated) return { refused: 'Питомец уже мутировал' };
+    profile.pet_mutated = true;
+  }
+  const xpGained = Math.floor(Math.random() * (foodDef.xpMax - foodDef.xpMin + 1)) + foodDef.xpMin;
+  profile.pet_xp = (profile.pet_xp || 0) + xpGained;
+  profile.pet_last_fed_date = localDateStr();
+  const leveled = checkPetLevelUp(profile);
+  let bonusGold = 0;
+  if (foodDef.bonusChance && Math.random() < foodDef.bonusChance) {
+    bonusGold = Math.floor(Math.random() * (foodDef.bonusGoldMax - foodDef.bonusGoldMin + 1)) + foodDef.bonusGoldMin;
+    profile.gold += bonusGold;
+  }
+  return { xpGained, bonusGold, leveled, mutated: !!foodDef.mutate };
+}
+
 async function logActivity(userId, eventType, description) {
   await sb.from('activity_log').insert({ user_id: userId, event_type: eventType, description });
 }
@@ -585,3 +722,40 @@ function showFloater(text) {
 const floatKeyframes = document.createElement('style');
 floatKeyframes.innerText = '@keyframes floatUp{0%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,-40px)}}';
 document.head.appendChild(floatKeyframes);
+
+// === Анимация вскрытия сундука/яйца — общая для Главной, Квестов и Магазина ===
+const chestAnimStyle = document.createElement('style');
+chestAnimStyle.innerText = `
+@keyframes chestShake {
+  0%,100% { transform: translateX(0) rotate(0); }
+  10% { transform: translateX(-6px) rotate(-8deg); } 20% { transform: translateX(6px) rotate(8deg); }
+  30% { transform: translateX(-6px) rotate(-6deg); } 40% { transform: translateX(6px) rotate(6deg); }
+  50% { transform: translateX(-4px) rotate(-4deg); } 60% { transform: translateX(4px) rotate(4deg); }
+  70% { transform: translateX(-2px) rotate(-2deg); } 80% { transform: translateX(2px) rotate(2deg); }
+  90% { transform: translateX(-1px) rotate(-1deg); }
+}
+@keyframes chestFlash { 0% { opacity:0; transform: scale(.5); } 40% { opacity:1; transform: scale(1.7); } 100% { opacity:0; transform: scale(2.4); } }
+@keyframes rewardPop { 0% { transform: scale(.3); opacity:0; } 60% { transform: scale(1.18); opacity:1; } 100% { transform: scale(1); opacity:1; } }
+`;
+document.head.appendChild(chestAnimStyle);
+
+// Трясёт визуал сундука/яйца и даёт вспышку цветом редкости. Возвращает Promise, resolve — когда пора показывать награду.
+function animateChestOpen(visualEl, rarityColor) {
+  return new Promise(resolve => {
+    const parent = visualEl.parentElement;
+    if (parent && getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+    visualEl.style.animation = 'chestShake .6s ease-in-out';
+    const flash = document.createElement('div');
+    flash.style.cssText = `position:absolute;left:50%;top:50%;width:90px;height:90px;margin:-45px 0 0 -45px;border-radius:50%;background:radial-gradient(circle, ${rarityColor}aa, transparent 70%);pointer-events:none;animation:chestFlash .55s ease-out forwards;z-index:1;`;
+    if (parent) parent.appendChild(flash);
+    setTimeout(() => { visualEl.style.animation = ''; flash.remove(); resolve(); }, 650);
+  });
+}
+
+// Ставит иконку награды с "поп"-анимацией появления
+function playRewardReveal(visualEl, iconEmoji) {
+  visualEl.innerText = iconEmoji;
+  visualEl.style.animation = 'rewardPop .4s ease-out';
+  setTimeout(() => { visualEl.style.animation = ''; }, 400);
+  if (navigator.vibrate) navigator.vibrate([30, 30, 60]);
+}
